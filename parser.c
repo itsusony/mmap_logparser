@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
                     pctmp = strstr(ptmp, ptmpcol);
                     if (pctmp) {
                         pctmp2 = pctmp + strlen(ptmpcol);
-                        pctmp_end = strstr(pctmp2,",");
+                        pctmp_end = pctmp2[0] == '"' ? (strstr(pctmp2+1,"\"")+1) : strstr(pctmp2,",");
                         if (!pctmp_end) pctmp_end = strstr(pctmp2,"}");
                         if (pctmp_end) {
                             int _len = pctmp_end - pctmp2;
