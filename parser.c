@@ -15,8 +15,8 @@ void usage() {
                     "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP -a AND_cond -n NOT_cond"
                     "\n\n\tCOLUMNS: col1,col2,col3"
                     "\n\n\tSEP: , (default is TAB), maxlen need be 1"
-                    "\n\n\tAND_cond: ip=8.8.8.8 (will list ip=8.8.8.8 only)"
-                    "\n\n\tNOT_cond: ip=1.1.1.1 (will list ip!=1.1.1.1 only)"
+                    "\n\n\tAND_cond: ip=8.8.8.8 (will list rows by ip=8.8.8.8)"
+                    "\n\n\tNOT_cond: ip=1.1.1.1 (will list rows by ip!=1.1.1.1)"
                     "\n\n"
     );
     exit(1);
