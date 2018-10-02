@@ -33,18 +33,18 @@ char* file_path = NULL;
 char* columns = NULL;
 
 char** arr_cols;
-int arr_collen;
+int arr_collen = 0;
 char* tp;
 char sep[2] = "\t";
 
 char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
-unsigned long plen;
+unsigned long plen = 0;
 
 char *and_key = NULL, *and_val = NULL;
 int and_col_i = -1;
 int and_check(const char* val) {
     if (and_val == NULL) {
-        return val == NULL ? 1 : 0;
+        return (val == NULL || strlen(val)==0) ? 1 : 0;
     } else {
         return (val && (strstr(val, and_val) || strstr(val, and_val))) ? 1 : 0;
     }
@@ -53,7 +53,7 @@ char *not_key = NULL, *not_val = NULL;
 int not_col_i = -1;
 int not_check(const char* val) {
     if (and_val == NULL) {
-        return val != NULL ? 1 : 0;
+        return (val != NULL && strlen(val)!=0) ? 1 : 0;
     } else {
         return (val && (!strstr(val, not_val) && !strstr(val, not_val))) ? 1 : 0;
     }
@@ -102,7 +102,6 @@ int main(int argc, char *argv[]) {
     if (!file_path || !columns || strlen(sep)!=1) usage();
 
     arr_cols = calloc(MAX_COLS_LEN+1, sizeof(char*)); // no need to free. will be gc by exit
-    arr_collen = 0;
     tp = strtok(columns, ",");
     while (tp != NULL && arr_collen < MAX_COLS_LEN) {
         if (strlen(tp)) {
