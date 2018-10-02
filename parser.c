@@ -12,42 +12,76 @@
 
 void usage() {
     fprintf(stderr, "this tool can convert jsv (json csv) to tsv"
-                    "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP"
+                    "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP -a AND_cond -n NOT_cond"
                     "\n\n\tCOLUMNS: col1,col2,col3"
                     "\n\n\tSEP: , (default is TAB), maxlen need be 1"
+                    "\n\n\tAND_cond: ip=8.8.8.8 (will list ip=8.8.8.8 only)"
+                    "\n\n\tNOT_cond: ip=1.1.1.1 (will list ip!=1.1.1.1 only)"
                     "\n\n"
     );
     exit(1);
 }
 
+char *mem;
+struct stat sb;
+int fd;
+long page_size, map_size;
+
+int c,i;
+char* file_path = NULL;
+char* columns = NULL;
+
+char** arr_cols;
+int arr_collen;
+char* tp;
+char sep[2] = "\t";
+
+char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
+unsigned long plen;
+
+char *and_key = NULL, *and_val = NULL, *and_match1 = NULL, *and_match2 = NULL;
+char *not_key = NULL, *not_val = NULL, *not_match1 = NULL, *not_match2 = NULL;
+
+void parse_cond(const char* arg, const char* split, char** _key, char** _val, char** _match1, char** _match2) {
+    char* tmp_and = strdup(arg);
+    char* ptr = strtok(tmp_and, split);
+    if (ptr) {
+        *_key = strdup(ptr);
+        ptr = strtok(NULL, split);
+        if (!ptr) {
+            fprintf(stderr, "and condition parameter wrong!\n");
+            exit(1);
+        }
+        *_val = strdup(ptr);
+        *_match1 = calloc(strlen(*_key) + strlen(*_val) + 32, sizeof(char));
+        *_match2 = calloc(strlen(*_key) + strlen(*_val) + 32, sizeof(char));
+        sprintf(*_match1, "\"%s\":\"%s", *_key, *_val);
+        sprintf(*_match2, "\"%s\":%s",   *_key, *_val);
+    }
+    free(tmp_and);
+}
+
 int main(int argc, char *argv[]) {
-    char *mem;
-    struct stat sb;
-    int fd;
-    long page_size, map_size;
-
-    int c,i;
-    char* file_path = NULL;
-    char* columns = NULL;
-
-    char** arr_cols;
-    int arr_collen;
-    char* tp;
-    char sep[2] = "\t";
-
-    char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
-    unsigned long plen;
-
-    while ((c=getopt(argc, argv, "f:c:s:")) != -1) {
+    while ((c=getopt(argc, argv, "f:c:s:a:n:")) != -1) {
         switch(c) {
             case 'f':
-                file_path = strdup(optarg);
+                if (!file_path) file_path = strdup(optarg);
                 break;
             case 'c':
-                columns = strdup(optarg);
+                if (!columns) columns = strdup(optarg);
                 break;
             case 's':
                 strncpy(sep, optarg, 1);
+                break;
+            case 'a':
+                if (!and_key && !and_val) {
+                    parse_cond(optarg, "=", &and_key, &and_val, &and_match1, &and_match2);
+                }
+                break;
+            case 'n':
+                if (!not_key && !not_val) {
+                    parse_cond(optarg, "=", &not_key, &not_val, &not_match1, &not_match2);
+                }
                 break;
         }
     }
@@ -80,6 +114,8 @@ int main(int argc, char *argv[]) {
                 ptmp = calloc(plen+1, sizeof(char));
                 strncpy(ptmp, p1, plen);
 
+                char **vals = calloc(arr_collen, sizeof(char*));
+                int vals_len = 0;
                 for (i=0;i<arr_collen;i++) {
                     _col = arr_cols[i];
 
@@ -96,14 +132,13 @@ int main(int argc, char *argv[]) {
                             char* val = _len ? calloc(_len+1,sizeof(char)) : NULL;
                             if (val) {
                                 strncat(val, pctmp2, _len);
-                                if (strchr(val, '"') != NULL) {
+                                if (val[0] == '\"' && val[_len-1] == '\"') {
                                     char* val2 = strdup(val+1);
                                     free(val);
                                     val2[_len-2] = '\0';
                                     val = val2;
                                 }
-                                fprintf(stdout,"%s",val);
-                                free(val);
+                                vals[vals_len++] = val;
                             }
                         } else {
                             fprintf(stderr, "json parse error: %s\n", ptmp);
@@ -112,9 +147,22 @@ int main(int argc, char *argv[]) {
                         }
                     }
                     free(ptmpcol);
-                    fprintf(stdout,"%s",(i!=arr_collen-1)?sep:"\n");
                 }
 
+                if (vals_len) {
+                    if ((!and_key && !and_val) || (strstr(ptmp, and_match1) || strstr(ptmp, and_match2))) {
+                        if ((!not_key && !not_val) || (!strstr(ptmp, not_match1) && !strstr(ptmp, not_match2))) {
+                            for (i=0;i<vals_len;i++) {
+                                fprintf(stdout,"%s%s",vals[i], ((i!=arr_collen-1)?sep:"\n"));
+                            }
+                        }
+                    }
+                }
+
+                for (i=0;i<vals_len;i++) {
+                    free(vals[i]);
+                }
+                free(vals);
                 free(ptmp);
 
                 p1 += plen+1;
