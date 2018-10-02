@@ -1,5 +1,5 @@
 # mmap_logparser
-less memory log parser by using mmap  
+less memory json-log parser by using mmap
 
 # usage
 ```
