@@ -12,11 +12,12 @@
 
 void usage() {
     fprintf(stderr, "this tool can convert jsv (json csv) to tsv"
-                    "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP -a AND_cond -n NOT_cond"
+                    "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP -a AND_cond -n NOT_cond -l LIKE_cond"
                     "\n\n\tCOLUMNS: col1,col2,col3"
                     "\n\n\tSEP: , (default is TAB), maxlen need be 1"
                     "\n\n\tAND_cond: ip=8.8.8.8 (will list rows by ip=8.8.8.8)"
                     "\n\n\tNOT_cond: ip=1.1.1.1 (will list rows by ip!=1.1.1.1)"
+                    "\n\n\tLIKE_cond: ua=ios    (will list rows by ua contains ios)"
                     "\n\n"
     );
     exit(1);
@@ -39,10 +40,14 @@ char sep[2] = "\t";
 char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
 unsigned long plen;
 
-char *and_key = NULL, *and_val = NULL, *and_match1 = NULL, *and_match2 = NULL;
-char *not_key = NULL, *not_val = NULL, *not_match1 = NULL, *not_match2 = NULL;
+char *and_key = NULL, *and_val = NULL;
+int and_col_i = -1;
+char *not_key = NULL, *not_val = NULL;
+int not_col_i = -1;
+char *like_key = NULL, *like_val = NULL;
+int like_col_i = -1;
 
-void parse_cond(const char* arg, const char* split, char** _key, char** _val, char** _match1, char** _match2) {
+void parse_cond(const char* arg, const char* split, char** _key, char** _val) {
     char* tmp_and = strdup(arg);
     char* ptr = strtok(tmp_and, split);
     if (ptr) {
@@ -53,16 +58,12 @@ void parse_cond(const char* arg, const char* split, char** _key, char** _val, ch
             exit(1);
         }
         *_val = strdup(ptr);
-        *_match1 = calloc(strlen(*_key) + strlen(*_val) + 32, sizeof(char));
-        *_match2 = calloc(strlen(*_key) + strlen(*_val) + 32, sizeof(char));
-        sprintf(*_match1, "\"%s\":\"%s", *_key, *_val);
-        sprintf(*_match2, "\"%s\":%s",   *_key, *_val);
     }
     free(tmp_and);
 }
 
 int main(int argc, char *argv[]) {
-    while ((c=getopt(argc, argv, "f:c:s:a:n:")) != -1) {
+    while ((c=getopt(argc, argv, "f:c:s:a:n:l:")) != -1) {
         switch(c) {
             case 'f':
                 if (!file_path) file_path = strdup(optarg);
@@ -74,14 +75,13 @@ int main(int argc, char *argv[]) {
                 strncpy(sep, optarg, 1);
                 break;
             case 'a':
-                if (!and_key && !and_val) {
-                    parse_cond(optarg, "=", &and_key, &and_val, &and_match1, &and_match2);
-                }
+                if (!and_key && !and_val) parse_cond(optarg, "=", &and_key, &and_val);
                 break;
             case 'n':
-                if (!not_key && !not_val) {
-                    parse_cond(optarg, "=", &not_key, &not_val, &not_match1, &not_match2);
-                }
+                if (!not_key && !not_val) parse_cond(optarg, "=", &not_key, &not_val);
+                break;
+            case 'l':
+                if (!like_key && !like_val) parse_cond(optarg, "=", &like_key, &like_val);
                 break;
         }
     }
@@ -92,7 +92,12 @@ int main(int argc, char *argv[]) {
     arr_collen = 0;
     tp = strtok(columns, ",");
     while (tp != NULL && arr_collen < MAX_COLS_LEN) {
-        arr_cols[arr_collen++] = strdup(tp);
+        if (strlen(tp)) {
+            arr_cols[arr_collen++] = strdup(tp);
+            if (and_key  && strcmp(tp, and_key)  == 0) and_col_i  = arr_collen-1;
+            if (not_key  && strcmp(tp, not_key)  == 0) not_col_i  = arr_collen-1;
+            if (like_key && strcmp(tp, like_key) == 0) like_col_i = arr_collen-1;
+        }
         tp = strtok(NULL, ",");
     }
 
@@ -119,7 +124,7 @@ int main(int argc, char *argv[]) {
                 for (i=0;i<arr_collen;i++) {
                     _col = arr_cols[i];
 
-                    ptmpcol = calloc(strlen(_col)+3+1, sizeof(char));
+                    ptmpcol = calloc(strlen(_col)+32, sizeof(char));
                     sprintf(ptmpcol,"\"%s\":", _col);
 
                     pctmp = strstr(ptmp, ptmpcol);
@@ -141,19 +146,24 @@ int main(int argc, char *argv[]) {
                                 vals[vals_len++] = val;
                             }
                         } else {
-                            fprintf(stderr, "json parse error: %s\n", ptmp);
-                            free(ptmpcol);
-                            break; // json error, goto next row
+                            fprintf(stderr, "error: json parse error: %s\n", ptmp);
+                            goto col_is_empty;
                         }
+                    } else {
+                        col_is_empty:;
+                        vals[vals_len++] = NULL;
                     }
                     free(ptmpcol);
                 }
 
                 if (vals_len) {
-                    if ((!and_key && !and_val) || (strstr(ptmp, and_match1) || strstr(ptmp, and_match2))) {
-                        if ((!not_key && !not_val) || (!strstr(ptmp, not_match1) && !strstr(ptmp, not_match2))) {
-                            for (i=0;i<vals_len;i++) {
-                                fprintf(stdout,"%s%s",vals[i], ((i!=arr_collen-1)?sep:"\n"));
+                    if ((and_col_i==-1) || (vals[and_col_i] && (strstr(vals[and_col_i], and_val) || strstr(vals[and_col_i], and_val)))) {
+                        if ((not_col_i==-1) || (vals[not_col_i] && (!strstr(vals[not_col_i], not_val) && !strstr(vals[not_col_i], not_val)))) {
+                            if ((like_col_i==-1) || (vals[like_col_i] && (strstr(vals[like_col_i], like_val) || strstr(vals[like_col_i], like_val)))) {
+                                for (i=0;i<vals_len;i++) {
+                                    const char* val = vals[i];
+                                    fprintf(stdout,"%s%s",(val==NULL ? "" : val), ((i!=arr_collen-1)?sep:"\n"));
+                                }
                             }
                         }
                     }
@@ -171,7 +181,7 @@ int main(int argc, char *argv[]) {
             }
         }
     } else {
-        fprintf(stderr, "file size error!\n");
+        fprintf(stderr, "file open error!\n");
         exit(1);
     }
 
