@@ -15,8 +15,8 @@ void usage() {
                     "\n\nusage:\n\n\t./parser -f LOGFILE_PATH -c COLUMNS -s SEP -a AND_cond -n NOT_cond -l LIKE_cond"
                     "\n\n\tCOLUMNS: col1,col2,col3"
                     "\n\n\tSEP: , (default is TAB), maxlen need be 1"
-                    "\n\n\tAND_cond: ip=8.8.8.8 (will list rows by ip=8.8.8.8)"
-                    "\n\n\tNOT_cond: ip=1.1.1.1 (will list rows by ip!=1.1.1.1)"
+                    "\n\n\tAND_cond: ip=8.8.8.8 (will list rows by ip=8.8.8.8), use empty like this: ip="
+                    "\n\n\tNOT_cond: ip=1.1.1.1 (will list rows by ip!=1.1.1.1), use empty like this: ip="
                     "\n\n\tLIKE_cond: ua=ios    (will list rows by ua contains ios)"
                     "\n\n"
     );
@@ -42,10 +42,25 @@ unsigned long plen;
 
 char *and_key = NULL, *and_val = NULL;
 int and_col_i = -1;
+int and_check(const char* val) {
+    if (and_val == NULL) {
+        return val == NULL ? 1 : 0;
+    } else {
+        return (val && (strstr(val, and_val) || strstr(val, and_val))) ? 1 : 0;
+    }
+}
 char *not_key = NULL, *not_val = NULL;
 int not_col_i = -1;
+int not_check(const char* val) {
+    if (and_val == NULL) {
+        return val != NULL ? 1 : 0;
+    } else {
+        return (val && (!strstr(val, not_val) && !strstr(val, not_val))) ? 1 : 0;
+    }
+}
 char *like_key = NULL, *like_val = NULL;
 int like_col_i = -1;
+int like_check(const char* val) { return (val && (strstr(val, like_val) || strstr(val, like_val))) ? 1 : 0; }
 
 void parse_cond(const char* arg, const char* split, char** _key, char** _val) {
     char* tmp_and = strdup(arg);
@@ -53,11 +68,9 @@ void parse_cond(const char* arg, const char* split, char** _key, char** _val) {
     if (ptr) {
         *_key = strdup(ptr);
         ptr = strtok(NULL, split);
-        if (!ptr) {
-            fprintf(stderr, "and condition parameter wrong!\n");
-            exit(1);
+        if (ptr) {
+            *_val = strdup(ptr);
         }
-        *_val = strdup(ptr);
     }
     free(tmp_and);
 }
@@ -157,9 +170,9 @@ int main(int argc, char *argv[]) {
                 }
 
                 if (vals_len) {
-                    if ((and_col_i==-1) || (vals[and_col_i] && (strstr(vals[and_col_i], and_val) || strstr(vals[and_col_i], and_val)))) {
-                        if ((not_col_i==-1) || (vals[not_col_i] && (!strstr(vals[not_col_i], not_val) && !strstr(vals[not_col_i], not_val)))) {
-                            if ((like_col_i==-1) || (vals[like_col_i] && (strstr(vals[like_col_i], like_val) || strstr(vals[like_col_i], like_val)))) {
+                    if ((and_col_i==-1) || and_check(vals[and_col_i])) {
+                        if ((not_col_i==-1) || not_check(vals[not_col_i])) {
+                            if ((like_col_i==-1) || like_check(vals[like_col_i])) {
                                 for (i=0;i<vals_len;i++) {
                                     const char* val = vals[i];
                                     fprintf(stdout,"%s%s",(val==NULL ? "" : val), ((i!=arr_collen-1)?sep:"\n"));
