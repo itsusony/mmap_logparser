@@ -40,42 +40,98 @@ char sep[2] = "\t";
 char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
 unsigned long plen = 0;
 
-char *and_key = NULL, *and_val = NULL;
-int and_col_i = -1;
-int and_check(const char* val) {
-    if (and_val == NULL) {
-        return (val == NULL || strlen(val)==0) ? 1 : 0;
-    } else {
-        return (val && (strstr(val, and_val) || strstr(val, and_val))) ? 1 : 0;
-    }
-}
-char *not_key = NULL, *not_val = NULL;
-int not_col_i = -1;
-int not_check(const char* val) {
-    if (and_val == NULL) {
-        return (val != NULL && strlen(val)!=0) ? 1 : 0;
-    } else {
-        return (val && (!strstr(val, not_val) && !strstr(val, not_val))) ? 1 : 0;
-    }
-}
-char *like_key = NULL, *like_val = NULL;
-int like_col_i = -1;
-int like_check(const char* val) { return (val && (strstr(val, like_val) || strstr(val, like_val))) ? 1 : 0; }
+typedef struct _KeyVal {
+    char* key;
+    char* val;
+} KeyVal;
 
-void parse_cond(const char* arg, const char* split, char** _key, char** _val) {
+KeyVal **and_conds;
+int and_cond_len = 0;
+KeyVal **not_conds;
+int not_cond_len = 0;
+KeyVal **like_conds;
+int like_cond_len = 0;
+
+int and_check(KeyVal** rows, int rows_len) {
+    if (!and_cond_len) return 1;
+    int j,k, rst;
+    for (k=0;k<rows_len;k++) {
+        KeyVal* row = rows[k];
+        if (row->key == NULL) continue;
+
+        for (j=0;j<and_cond_len;j++) {
+            KeyVal *kv = and_conds[j];
+            if (strcmp(kv->key, row->key) != 0) continue;
+
+            if (kv->val == NULL) {
+                rst = (row->val == NULL || strlen(row->val)==0) ? 1 : 0;
+            } else {
+                rst = (row->val && strstr(row->val, kv->val)) ? 1 : 0;
+            }
+            if (!rst) return 0;
+        }
+    }
+    return 1;
+}
+int not_check(KeyVal** rows, int rows_len) {
+    if (!not_cond_len) return 1;
+    int j,k, rst;
+    for (k=0;k<rows_len;k++) {
+        KeyVal* row = rows[k];
+        if (row->key == NULL) continue;
+
+        for (j=0;j<not_cond_len;j++) {
+            KeyVal *kv = not_conds[j];
+            if (strcmp(kv->key, row->key) != 0) continue;
+
+            if (kv->val == NULL) {
+                rst = (row->val != NULL && strlen(row->val)!=0) ? 1 : 0;
+            } else {
+                rst = (row->val && !strstr(row->val, kv->val)) ? 1 : 0;
+            }
+            if (!rst) return 0;
+        }
+    }
+    return 1;
+}
+int like_check(KeyVal** rows, int rows_len) {
+    if (!like_cond_len) return 1;
+    int j,k, rst;
+    for (k=0;k<rows_len;k++) {
+        KeyVal* row = rows[k];
+        if (row->key == NULL) continue;
+
+        for (j=0;j<like_cond_len;j++) {
+            KeyVal *kv = like_conds[j];
+            if (strcmp(kv->key, row->key) != 0) continue;
+
+            rst = (row->val && (strstr(row->val, kv->val))) ? 1 : 0;
+            if (rst) return 1;
+        }
+    }
+    return 0;
+}
+
+void parse_cond(const char* arg, const char* split, KeyVal*** conds, int* conds_len) {
     char* tmp_and = strdup(arg);
     char* ptr = strtok(tmp_and, split);
     if (ptr) {
-        *_key = strdup(ptr);
+        KeyVal* ret = calloc(1,sizeof(KeyVal));
+        ret->key = strdup(ptr);
+
         ptr = strtok(NULL, split);
-        if (ptr) {
-            *_val = strdup(ptr);
-        }
+        ret->val = ptr ? strdup(ptr) : NULL;
+
+        (*conds)[(*conds_len)++] = ret;
     }
     free(tmp_and);
 }
 
 int main(int argc, char *argv[]) {
+    and_conds  = calloc(128,sizeof(KeyVal*));
+    not_conds  = calloc(128,sizeof(KeyVal*));
+    like_conds = calloc(128,sizeof(KeyVal*));
+
     while ((c=getopt(argc, argv, "f:c:s:a:n:l:")) != -1) {
         switch(c) {
             case 'f':
@@ -88,13 +144,13 @@ int main(int argc, char *argv[]) {
                 strncpy(sep, optarg, 1);
                 break;
             case 'a':
-                if (!and_key && !and_val) parse_cond(optarg, "=", &and_key, &and_val);
+                parse_cond(optarg, "=", &and_conds, &and_cond_len);
                 break;
             case 'n':
-                if (!not_key && !not_val) parse_cond(optarg, "=", &not_key, &not_val);
+                parse_cond(optarg, "=", &not_conds, &not_cond_len);
                 break;
             case 'l':
-                if (!like_key && !like_val) parse_cond(optarg, "=", &like_key, &like_val);
+                parse_cond(optarg, "=", &like_conds, &like_cond_len);
                 break;
         }
     }
@@ -106,9 +162,6 @@ int main(int argc, char *argv[]) {
     while (tp != NULL && arr_collen < MAX_COLS_LEN) {
         if (strlen(tp)) {
             arr_cols[arr_collen++] = strdup(tp);
-            if (and_key  && strcmp(tp, and_key)  == 0) and_col_i  = arr_collen-1;
-            if (not_key  && strcmp(tp, not_key)  == 0) not_col_i  = arr_collen-1;
-            if (like_key && strcmp(tp, like_key) == 0) like_col_i = arr_collen-1;
         }
         tp = strtok(NULL, ",");
     }
@@ -131,8 +184,8 @@ int main(int argc, char *argv[]) {
                 ptmp = calloc(plen+1, sizeof(char));
                 strncpy(ptmp, p1, plen);
 
-                char **vals = calloc(arr_collen, sizeof(char*));
-                int vals_len = 0;
+                KeyVal **kvs = calloc(arr_collen, sizeof(KeyVal*));
+                int kvs_len = 0;
                 for (i=0;i<arr_collen;i++) {
                     _col = arr_cols[i];
 
@@ -155,7 +208,10 @@ int main(int argc, char *argv[]) {
                                     val2[_len-2] = '\0';
                                     val = val2;
                                 }
-                                vals[vals_len++] = val;
+                                KeyVal* kv = calloc(1,sizeof(KeyVal*));
+                                kv->key = strdup(_col);
+                                kv->val = val;
+                                kvs[kvs_len++] = kv;
                             }
                         } else {
                             fprintf(stderr, "error: json parse error: %s\n", ptmp);
@@ -163,28 +219,28 @@ int main(int argc, char *argv[]) {
                         }
                     } else {
                         col_is_empty:;
-                        vals[vals_len++] = NULL;
+                        KeyVal* kv = calloc(1,sizeof(KeyVal*));
+                        kv->key = NULL;
+                        kv->val = NULL;
+                        kvs[kvs_len++] = kv;
                     }
                     free(ptmpcol);
                 }
 
-                if (vals_len) {
-                    if ((and_col_i==-1) || and_check(vals[and_col_i])) {
-                        if ((not_col_i==-1) || not_check(vals[not_col_i])) {
-                            if ((like_col_i==-1) || like_check(vals[like_col_i])) {
-                                for (i=0;i<vals_len;i++) {
-                                    const char* val = vals[i];
-                                    fprintf(stdout,"%s%s",(val==NULL ? "" : val), ((i!=arr_collen-1)?sep:"\n"));
-                                }
-                            }
-                        }
+                if (and_check(kvs,kvs_len) && not_check(kvs,kvs_len) && like_check(kvs,kvs_len)) {
+                    for (i=0;i<kvs_len;i++) {
+                        const KeyVal* kv = kvs[i];
+                        fprintf(stdout,"%s%s",(kv->val==NULL ? "" : kv->val), ((i!=arr_collen-1)?sep:"\n"));
                     }
                 }
 
-                for (i=0;i<vals_len;i++) {
-                    free(vals[i]);
+                for (i=0;i<kvs_len;i++) {
+                    KeyVal* kv = kvs[i];
+                    free(kv->key);
+                    free(kv->val);
+                    free(kv);
                 }
-                free(vals);
+                free(kvs);
                 free(ptmp);
 
                 p1 += plen+1;
