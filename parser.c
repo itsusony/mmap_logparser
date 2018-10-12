@@ -23,23 +23,7 @@ void usage() {
     exit(1);
 }
 
-char *mem;
-struct stat sb;
-int fd;
-long page_size, map_size;
-
-int c,i;
-char* file_path = NULL;
-char* columns = NULL;
-
-char** arr_cols;
-int arr_collen = 0;
-char* tp;
 char sep[2] = "\t";
-
-char *p1, *p2, *ptmp, *_col, *ptmpcol, *pctmp, *pctmp2, *pctmp_end;
-unsigned long plen = 0;
-
 typedef struct _KeyVal {
     char* key;
     char* val;
@@ -132,6 +116,8 @@ int main(int argc, char *argv[]) {
     not_conds  = calloc(128,sizeof(KeyVal*));
     like_conds = calloc(128,sizeof(KeyVal*));
 
+    char *file_path = NULL, *columns = NULL;
+    int c;
     while ((c=getopt(argc, argv, "f:c:s:a:n:l:")) != -1) {
         switch(c) {
             case 'f':
@@ -157,8 +143,9 @@ int main(int argc, char *argv[]) {
 
     if (!file_path || !columns || strlen(sep)!=1) usage();
 
-    arr_cols = calloc(MAX_COLS_LEN+1, sizeof(char*)); // no need to free. will be gc by exit
-    tp = strtok(columns, ",");
+    char** arr_cols = calloc(MAX_COLS_LEN+1, sizeof(char*)); // no need to free. will be gc by exit
+    int arr_collen = 0;
+    char* tp = strtok(columns, ",");
     while (tp != NULL && arr_collen < MAX_COLS_LEN) {
         if (strlen(tp)) {
             arr_cols[arr_collen++] = strdup(tp);
@@ -166,36 +153,38 @@ int main(int argc, char *argv[]) {
         tp = strtok(NULL, ",");
     }
 
+    struct stat sb;
     if (stat(file_path, &sb) == 0) {
-        fd = open(file_path, O_RDONLY);
+        int fd = open(file_path, O_RDONLY);
 
-        page_size = getpagesize();
-        map_size = (sb.st_size / page_size + 1) * page_size;
+        int page_size = getpagesize();
+        int map_size = (sb.st_size / page_size + 1) * page_size;
 
+        char *mem = NULL;
         if ((mem = mmap(NULL, map_size, PROT_READ, MAP_SHARED, fd, 0)) == MAP_FAILED) {
             fprintf(stderr, "mmap open error!\n");
             exit(1);
         } else { // mmap ok
-            p1 = mem;
-            p2 = p1 ? strchr(p1, '\n') : NULL;
-            plen = p2 ? p2 - p1 : 0;
+            char* p1 = mem;
+            char* p2 = p1 ? strchr(p1, '\n') : NULL;
+            unsigned long plen = p2 ? p2 - p1 : 0;
 
             while (p1 && plen) {
-                ptmp = calloc(plen+1, sizeof(char));
+                char* ptmp = calloc(plen+1, sizeof(char));
                 strncpy(ptmp, p1, plen);
 
                 KeyVal **kvs = calloc(arr_collen, sizeof(KeyVal*));
-                int kvs_len = 0;
+                int kvs_len = 0, i;
                 for (i=0;i<arr_collen;i++) {
-                    _col = arr_cols[i];
+                    char* _col = arr_cols[i];
 
-                    ptmpcol = calloc(strlen(_col)+32, sizeof(char));
+                    char* ptmpcol = calloc(strlen(_col)+32, sizeof(char));
                     sprintf(ptmpcol,"\"%s\":", _col);
 
-                    pctmp = strstr(ptmp, ptmpcol);
+                    char* pctmp = strstr(ptmp, ptmpcol);
                     if (pctmp) {
-                        pctmp2 = pctmp + strlen(ptmpcol);
-                        pctmp_end = pctmp2[0] == '"' ? (strstr(pctmp2+1,"\"")+1) : strstr(pctmp2,",");
+                        char* pctmp2 = pctmp + strlen(ptmpcol);
+                        char* pctmp_end = pctmp2[0] == '"' ? (strstr(pctmp2+1,"\"")+1) : strstr(pctmp2,",");
                         if (!pctmp_end) pctmp_end = strstr(pctmp2,"}");
                         if (pctmp_end) {
                             int _len = pctmp_end - pctmp2;
