@@ -36,60 +36,77 @@ int not_cond_len = 0;
 KeyVal **like_conds;
 int like_cond_len = 0;
 
-int and_check(KeyVal** rows, int rows_len) {
+int and_check(KeyVal** kvs, int kvs_len) {
     if (!and_cond_len) return 1;
     int j,k, rst;
-    for (k=0;k<rows_len;k++) {
-        KeyVal* row = rows[k];
-        if (row->key == NULL) continue;
+    for (k=0;k<kvs_len;k++) {
+        KeyVal* col = kvs[k];
+        if (col->key == NULL) continue;
 
         for (j=0;j<and_cond_len;j++) {
             KeyVal *kv = and_conds[j];
-            if (strcmp(kv->key, row->key) != 0) continue;
+            if (strcmp(kv->key, col->key) != 0) continue;
 
             if (kv->val == NULL) {
-                rst = (row->val == NULL || strlen(row->val)==0) ? 1 : 0;
+                rst = (col->val == NULL || strlen(col->val)==0) ? 1 : 0;
             } else {
-                rst = (row->val && strstr(row->val, kv->val)) ? 1 : 0;
+                rst = (col->val && strstr(col->val, kv->val)) ? 1 : 0;
             }
             if (!rst) return 0;
         }
     }
     return 1;
 }
-int not_check(KeyVal** rows, int rows_len) {
+int not_check(KeyVal** kvs, int kvs_len) {
     if (!not_cond_len) return 1;
     int j,k, rst;
-    for (k=0;k<rows_len;k++) {
-        KeyVal* row = rows[k];
-        if (row->key == NULL) continue;
+    for (k=0;k<kvs_len;k++) {
+        KeyVal* col = kvs[k];
+        if (col->key == NULL) continue;
 
         for (j=0;j<not_cond_len;j++) {
             KeyVal *kv = not_conds[j];
-            if (strcmp(kv->key, row->key) != 0) continue;
+            if (strcmp(kv->key, col->key) != 0) continue;
 
             if (kv->val == NULL) {
-                rst = (row->val != NULL && strlen(row->val)!=0) ? 1 : 0;
+                rst = (col->val != NULL && strlen(col->val)!=0) ? 1 : 0;
             } else {
-                rst = (row->val && !strstr(row->val, kv->val)) ? 1 : 0;
+                rst = (col->val && !strstr(col->val, kv->val)) ? 1 : 0;
             }
             if (!rst) return 0;
         }
     }
+
+    for (j=0;j<not_cond_len;j++) {
+        KeyVal *kv = not_conds[j];
+        if (kv->val == NULL) {
+            int exist = 0; // if not exist, return 0
+            for (k=0;k<kvs_len;k++) {
+                KeyVal* col = kvs[k];
+                if (col->key == NULL) continue;
+                if (strcmp(kv->key, col->key) == 0) {
+                    exist=1;
+                    break;
+                }
+            }
+            if (!exist) return 0;
+        }
+    }
+
     return 1;
 }
-int like_check(KeyVal** rows, int rows_len) {
+int like_check(KeyVal** kvs, int kvs_len) {
     if (!like_cond_len) return 1;
     int j,k, rst;
-    for (k=0;k<rows_len;k++) {
-        KeyVal* row = rows[k];
-        if (row->key == NULL) continue;
+    for (k=0;k<kvs_len;k++) {
+        KeyVal* col = kvs[k];
+        if (col->key == NULL) continue;
 
         for (j=0;j<like_cond_len;j++) {
             KeyVal *kv = like_conds[j];
-            if (strcmp(kv->key, row->key) != 0) continue;
+            if (strcmp(kv->key, col->key) != 0) continue;
 
-            rst = (row->val && (strstr(row->val, kv->val))) ? 1 : 0;
+            rst = (col->val && (strstr(col->val, kv->val))) ? 1 : 0;
             if (rst) return 1;
         }
     }
