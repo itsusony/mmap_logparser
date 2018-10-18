@@ -129,9 +129,9 @@ void parse_cond(const char* arg, const char* split, KeyVal*** conds, int* conds_
 }
 
 int main(int argc, char *argv[]) {
-    and_conds  = calloc(128,sizeof(KeyVal*));
-    not_conds  = calloc(128,sizeof(KeyVal*));
-    like_conds = calloc(128,sizeof(KeyVal*));
+    and_conds  = calloc(MAX_COLS_LEN,sizeof(KeyVal*));
+    not_conds  = calloc(MAX_COLS_LEN,sizeof(KeyVal*));
+    like_conds = calloc(MAX_COLS_LEN,sizeof(KeyVal*));
 
     char *file_path = NULL, *columns = NULL;
     int c;
